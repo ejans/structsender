@@ -1,0 +1,31 @@
+-- -*- mode: lua; -*-
+
+return bd.system {
+   imports = {
+      "std_types/stdtypes/stdtypes.so",
+      "std_blocks/ptrig/ptrig.so",
+      "std_blocks/lfds_buffers/lfds_cyclic.so",
+      "std_blocks/hexdump/hexdump.so",
+      "blocks/sender.so",
+      "blocks/receiver.so",
+   },
+   
+   blocks = {
+      {name="ptrig1", type="std_triggers/ptrig"},
+      {name="fifo1", type="lfds_buffers/cyclic"},
+      {name="sender1", type="sender"},
+      {name="receiver1", type="receiver"},
+   },
+   
+   connections = {
+      {src="sender1.data", tgt="fifo1"},
+      {src="fifo1", tgt="receiver1.data"},
+   },
+   
+   configurations = {
+      { name="fifo1", config={type_name="struct structsender_data", buffer_len=1}},
+      { name="sender1", config={number=5, string="This Is A String"}},
+      { name="ptrig1", config={period={sec=1,usec=0}, trig_blocks={{b="#sender1", num_steps=1, measure=0},
+                                                                   {b="#receiver1", num_steps=1, measure=0}}}}
+   },
+}
