@@ -1,0 +1,133 @@
+-- -*- mode: lua; -*-
+
+lua_structsender_sender = [[
+
+local ubx=require "ubx"
+local ffi = require "ffi"
+local ts = tostring
+
+-- global state
+conf=nil
+
+function init(b)
+   b=ffi.cast("ubx_block_t*", b)
+   ubx.ffi_load_types(b.ni)
+
+   --- add config
+   ubx.config_add(b, "string", "The string to be send", "char", 1)
+   ubx.config_add(b, "number", "The integer to be send", "int", 1)
+
+   --- add ports
+   ubx.port_add(b, "data", "This port sends out the struct", nil, 0, "struct structsender_data", 1, 0)
+
+   --- initialize conf
+   conf={}
+   local port = ubx.port_get(b, "data")
+   conf.ubx_data = ubx.port_alloc_write_sample(port)
+   conf.data = {}
+
+   --- set config
+   ubx.set_config(b, "string", "This is a string")
+   ubx.set_config(b, "number", 5)
+
+   return true
+end
+
+function start(b)
+
+   --- get conf
+   conf.data.text = ffi.cast("char*", ubx.data_tolua(ubx.config_get_data(b, "string")))
+   conf.data.number = ffi.cast("int", ubx.data_tolua(ubx.config_get_data(b, "number")))
+
+   if conf.data.text == 0 then
+      print(ubx.safe_tostr(b.name)..": invalid/nonexisting string")
+      return false
+   end
+
+   return true
+end
+
+function step(b)
+
+   local port = ubx.port_get(b, "data")
+   ubx.data_set(conf.ubx_data, conf.data)
+   ubx.port_write(port, conf.ubx_data)
+end
+
+function cleanup(b)
+   conf=nil
+end
+]]
+
+lua_structsender_receiver = [[
+
+local ubx=require "ubx"
+local ffi = require "ffi"
+local ts = tostring
+
+-- global state
+conf=nil
+
+function init(b)
+   b=ffi.cast("ubx_block_t*", b)
+   ubx.ffi_load_types(b.ni)
+
+   --- add ports
+   ubx.port_add(b, "data", "This port receives the struct", "struct structsender_data", 1, nil, 0, 0)
+
+   --- initialize conf
+   conf={}
+   local port = ubx.port_get(b, "data")
+   conf.ubx_data = ubx.port_alloc_read_sample(port)
+
+   return true
+end
+
+function step(b)
+   local port = ubx.port_get(b, "data")
+   ubx.port_read(port, conf.ubx_data)
+   local dat = ubx.data_to_cdata(conf.ubx_data)
+   local text = ffi.string(dat.text)
+   local number = dat.number
+   print("DATA: "..ts(conf.ubx_data))
+   print("DATA.TEXT: "..text)
+   print("DATA.NUMBER: "..number)
+   print("================")
+end
+
+function cleanup(b)
+   conf=nil
+end
+]]
+
+return bd.system {
+   imports = {
+      "std_types/stdtypes/stdtypes.so",
+      "std_blocks/ptrig/ptrig.so",
+      "std_blocks/lfds_buffers/lfds_cyclic.so",
+      "std_blocks/hexdump/hexdump.so",
+      "std_blocks/luablock/luablock.so",
+      "blocks/sender.so",
+   },
+   
+   blocks = {
+      {name="ptrig1", type="std_triggers/ptrig"},
+      {name="fifo1", type="lfds_buffers/cyclic"},
+      {name="sender1", type="lua/luablock"},
+      {name="receiver1", type="lua/luablock"},
+   },
+   
+   connections = {
+      {src="sender1.data", tgt="fifo1"},
+      {src="fifo1", tgt="receiver1.data"},
+   },
+
+   configurations = {
+      { name="fifo1", config={type_name="struct structsender_data", buffer_len=1}},
+      --{ name="sender1", config={number=5, string="This Is A String"}},
+      { name="sender1", config = { lua_str = lua_structsender_sender }},
+      { name="receiver1", config = { lua_str = lua_structsender_receiver }},
+      { name="ptrig1", config={period={sec=1,usec=0}, trig_blocks={{b="#sender1", num_steps=1, measure=0},
+                                                                   {b="#receiver1", num_steps=1, measure=0}}}}
+   },
+}
