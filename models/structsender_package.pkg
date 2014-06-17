@@ -12,8 +12,8 @@ return pkg
   },
   
   blocks = {
-    { name="sender", file="structsender_init/sender.lua", src_dir="src" },
-    { name="receiver", file="structsender_init/receiver.lua", src_dir="src" },
+    { name="sender", file="structsender_init/sender.blx", src_dir="src" },
+    { name="receiver", file="structsender_init/receiver.blx", src_dir="src" },
   },
   
   libraries = {

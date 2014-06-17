@@ -13,7 +13,7 @@ $ cd template
 $ mkdir <microblx\_cmake path>/structsender
 $ cp * <microblx\_cmake path>/structsender/
 $ cd <microblx\_cmake path>
-$ ./meta_package.lua -s structsender/structsender_package.lua
+$ ./generate_pkg.lua -s structsender/structsender_package.pkg
 ```
 
 [microblx cmake]: https://github.com/haianos/microblx_cmake
