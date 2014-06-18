@@ -10,6 +10,7 @@ local ts = tostring
 conf=nil
 
 function init(b)
+
    b=ffi.cast("ubx_block_t*", b)
    ubx.ffi_load_types(b.ni)
 
@@ -19,44 +20,99 @@ function init(b)
 
    --- add ports
    ubx.port_add(b, "data", "This port sends out the struct", nil, 0, "struct structsender_data", 1, 0)
+   ubx.port_add(b, "localp", "The internal port", "struct structsender_data", 1, "struct structsender_data", 1, 0)
 
    --- initialize conf
-   conf={}
+   conf = {}
    local port = ubx.port_get(b, "data")
-   conf.ubx_data = ubx.port_alloc_write_sample(port)
-   conf.data = {}
+   local lclp = ubx.port_get(b, "localp")
+
+   --- allocate samples
+   conf.port_sample=ubx.port_alloc_write_sample(port)
+   conf.lcalp_sample_wr=ubx.port_alloc_write_sample(lclp)
+   conf.lcalp_sample_rd=ubx.port_alloc_read_sample(lclp)
 
    --- set config
-   ubx.set_config(b, "string", "This is a string")
+   ubx.set_config(b, "string", "This is a string!")
    ubx.set_config(b, "number", 5)
 
+   --- create local i_block
+   --ubx.module_load(b.ni, "std_blocks/lfds_buffers/lfds_cyclic.so")
+   local fifo = ubx.block_create(b.ni, "lfds_buffers/cyclic", "local_fifo", {buffer_len=1, type_name="struct structsender_data"})
+   local lcalp = ubx.port_get(b, "localp")
+
+   ubx.ports_connect_uni(lcalp, lcalp, fifo)
+
    return true
+
 end
 
 function start(b)
 
-   --- get conf
-   conf.data.text = ffi.cast("char*", ubx.data_tolua(ubx.config_get_data(b, "string")))
-   conf.data.number = ffi.cast("int", ubx.data_tolua(ubx.config_get_data(b, "number")))
+   b=ffi.cast("ubx_block_t*", b)
+   local lcalp = ubx.port_get(b, "localp")
+   local fifo = ubx.block_get(b.ni, "local_fifo")
 
-   if conf.data.text == 0 then
-      print(ubx.safe_tostr(b.name)..": invalid/nonexisting string")
-      return false
+   if (fifo:get_block_state() == "preinit") then
+
+      local con = {}
+
+      ubx.block_init(fifo)
+      ubx.block_start(fifo)
+
+      --- set config to i_block
+      con.number = ffi.cast("int", ubx.data_tolua(ubx.config_get_data(b, "number")))
+      con.text = ffi.cast("char*", ubx.data_tolua(ubx.config_get_data(b, "string")))
+
+      ubx.data_set(conf.lcalp_sample_wr, con)
+      ubx.port_write(lcalp, conf.lcalp_sample_wr)
+
+      --- remove config
+      ubx.config_rm(b, "number")
+      ubx.config_rm(b, "string")
+
+   else
+
+      --- write port???
+
    end
 
    return true
+
 end
 
 function step(b)
 
    local port = ubx.port_get(b, "data")
-   ubx.data_set(conf.ubx_data, conf.data)
-   ubx.port_write(port, conf.ubx_data)
+   local lclp = ubx.port_get(b, "localp")
+   local con = {}
+
+   ubx.port_read(lclp, conf.lcalp_sample_rd)
+   local con2 = ubx.data_to_cdata(conf.lcalp_sample_rd)
+
+   local text = ffi.string(con2.text)
+   local number = con2.number
+   con.number = ffi.cast("int", number)
+   con.text = ffi.cast("char*", text)
+   ubx.data_set(conf.port_sample, con)
+   ubx.data_set(conf.lcalp_sample_wr, con)
+
+   ubx.port_write(port, conf.port_sample)
+   ubx.port_write(lclp, conf.lcalp_sample_rd)
+
 end
 
 function cleanup(b)
+
+   b=ffi.cast("ubx_block_t*", b)
+   local fifo = ubx.block_get(b.ni, "local_fifo")
+   local lclp = ubx.port_get(b, "localp")
+   ubx.ports_disconnect_uni(lclp, lclp, fifo)
+   ubx.block_unload(b.ni, "local_fifo")
+
    conf=nil
 end
+
 ]]
 
 lua_structsender_receiver = [[
@@ -69,6 +125,7 @@ local ts = tostring
 conf=nil
 
 function init(b)
+
    b=ffi.cast("ubx_block_t*", b)
    ubx.ffi_load_types(b.ni)
 
@@ -81,23 +138,31 @@ function init(b)
    conf.ubx_data = ubx.port_alloc_read_sample(port)
 
    return true
+
 end
 
 function step(b)
+
    local port = ubx.port_get(b, "data")
    ubx.port_read(port, conf.ubx_data)
+
    local dat = ubx.data_to_cdata(conf.ubx_data)
    local text = ffi.string(dat.text)
    local number = dat.number
+
    print("DATA: "..ts(conf.ubx_data))
    print("DATA.TEXT: "..text)
    print("DATA.NUMBER: "..number)
    print("================")
+
 end
 
 function cleanup(b)
+
    conf=nil
+
 end
+
 ]]
 
 return bd.system {
@@ -107,7 +172,6 @@ return bd.system {
       "std_blocks/lfds_buffers/lfds_cyclic.so",
       "std_blocks/hexdump/hexdump.so",
       "std_blocks/luablock/luablock.so",
-      --"blocks/sender.so",
       "types/ssendertypes.so",
    },
    
@@ -125,7 +189,6 @@ return bd.system {
 
    configurations = {
       { name="fifo1", config={type_name="struct structsender_data", buffer_len=1}},
-      --{ name="sender1", config={number=5, string="This Is A String"}},
       { name="sender1", config = { lua_str = lua_structsender_sender }},
       { name="receiver1", config = { lua_str = lua_structsender_receiver }},
       { name="ptrig1", config={period={sec=1,usec=0}, trig_blocks={{b="#sender1", num_steps=1, measure=0},
