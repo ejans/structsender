@@ -41,10 +41,12 @@ int create_local_fifo(ubx_block_t *b)
         *(uint32_t*)d2->data = (uint32_t) 1;
 
         /* set data_len */
+	/*
         DBG("set data length");
         d3 = ubx_config_get_data(fifo, "data_len");
         d3->data = malloc(sizeof(uint32_t));
         *(uint32_t*)d3->data = (uint32_t) sizeof(struct structsender_data);
+	*/
 
         /* get ports */
         DBG("get ports");
@@ -116,13 +118,24 @@ int sender_start(ubx_block_t *b)
 		//TODO Do something???
 	}
 
+	/*
 	inf->dat.text = (char*) ubx_config_get_data_ptr(b, "string", &clen);
 	num = (int*) ubx_config_get_data_ptr(b, "number", &clen2);
 	inf->dat.number = *num;
-	// TODO Read data from config, write to port and remove config
+	*/
+	// Read data from config
 	data.text = (char*) ubx_config_get_data_ptr(b, "string", &clen);
-	data.number = (int) (int*) ubx_config_get_data_ptr(b, "number", &clen2);
+	//data.number = (int) (int*) ubx_config_get_data_ptr(b, "number", &clen2);
+	data.number = *(int*) ubx_config_get_data_ptr(b, "number", &clen2);
+	// Write data to port of local fifo
 	write_local(local, &data);
+	DBG("DATA: %p\n", data);
+	DBG("DATA.TEXT: %s\n", data.text);
+	DBG("DATA.NUMBER: %i\n", data.number);
+	// Remove configs
+	ubx_config_rm(b, "string");
+	ubx_config_rm(b, "number");
+
 	return ret;
 }
 
@@ -154,8 +167,24 @@ void sender_cleanup(ubx_block_t *b)
 /* step */
 void sender_step(ubx_block_t *b)
 {
+	/*
 	struct sender_info *inf= (struct sender_info*) b->private_data;
-	//TODO Read from port, write to port, write to data
 	write_data(inf->ports.data, &inf->dat);
+	*/
+	//TODO Read from port, write to port, write to data
+	ubx_block_t *fifo;
+	ubx_port_t *local,*datap;
+	struct structsender_data data;
+
+	fifo = ubx_block_get(b->ni, "local_fifo");
+	local = ubx_port_get(b, "local");
+	datap = ubx_port_get(b, "data");
+
+	read_local(local, &data);
+	DBG("DATA: %p\n", data);
+	DBG("DATA.TEXT: %s\n", data.text);
+	DBG("DATA.NUMBER: %i\n", data.number);
+	write_data(local, &data);
+	write_data(datap, &data);
 }
 
