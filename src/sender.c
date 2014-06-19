@@ -125,7 +125,6 @@ int sender_start(ubx_block_t *b)
 	*/
 	// Read data from config
 	data.text = (char*) ubx_config_get_data_ptr(b, "string", &clen);
-	//data.number = (int) (int*) ubx_config_get_data_ptr(b, "number", &clen2);
 	data.number = *(int*) ubx_config_get_data_ptr(b, "number", &clen2);
 	// Write data to port of local fifo
 	write_local(local, &data);
