@@ -132,7 +132,8 @@ int sender_start(ubx_block_t *b)
 	DBG("DATA.TEXT: %s\n", data.text);
 	DBG("DATA.NUMBER: %i\n", data.number);
 	// Remove configs
-	ubx_config_rm(b, "string");
+	// if we don't remove these the pointer for the text will still exist.
+	//ubx_config_rm(b, "string");
 	ubx_config_rm(b, "number");
 
 	return ret;
